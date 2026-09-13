@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moderasi Gambar Otomatis (Rust)</title>
+<style>
+  :root {
+    --bg: #f4f6fa; --surface: #ffffff; --ink: #101828; --muted: #667085;
+    --border: #e4e7ec; --primary: #0b4da2; --primary-ink: #ffffff;
+    --green: #15803d; --green-bg: #ecfdf3; --green-bd: #abefc6;
+    --red: #b42318; --red-bg: #fef3f2; --red-bd: #fecdca;
+    --amber: #b54708; --amber-bg: #fffaeb; --amber-bd: #fedf89;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.55; font-size: 15px; }
+  .topbar { background: #0f1f3d; color: #fff; }
+  .topbar-in { max-width: 1000px; margin: 0 auto; padding: .9rem 1.25rem;
+    display: flex; align-items: center; gap: .8rem; }
+  .brand-mark { width: 34px; height: 34px; border-radius: 8px; background: var(--primary);
+    color: #fff; display: grid; place-items: center; font-weight: 800; flex-shrink: 0; }
+  .topbar h1 { font-size: 1.05rem; font-weight: 700; }
+  .topbar .sub { color: #b9c6dd; font-size: .78rem; margin-top: 1px; }
+  .health { margin-left: auto; display: flex; align-items: center; gap: .6rem;
+    font-size: .8rem; color: #b9c6dd; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #f87171; }
+  .dot.ok { background: #34d399; }
+  main { max-width: 1000px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.4rem 1.5rem; margin-bottom: 1.4rem; }
+  .card h2 { font-size: 1rem; font-weight: 700; margin-bottom: 1.1rem; }
+  .dropzone { border: 1.5px dashed #b6c2d6; border-radius: 10px; background: #fafbfd;
+    padding: 2rem 1.5rem; text-align: center; cursor: pointer; }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--primary); background: #eef4fc; }
+  .dropzone p.main { font-weight: 600; }
+  .dropzone p.main .browse { color: var(--primary); text-decoration: underline; }
+  .dropzone p.hint { color: var(--muted); font-size: .82rem; margin-top: .3rem; }
+  .queue { margin-top: 1rem; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .queue-head { display: flex; justify-content: space-between; padding: .5rem .9rem;
+    background: #f9fafb; border-bottom: 1px solid var(--border); font-size: .82rem; color: var(--muted); }
+  .qrow { display: flex; align-items: center; gap: .75rem; padding: .45rem .9rem;
+    border-bottom: 1px solid var(--border); font-size: .86rem; }
+  .qrow:last-child { border-bottom: none; }
+  .qrow .thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px;
+    border: 1px solid var(--border); background: #f9fafb; flex-shrink: 0; }
+  .qrow .nm { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .qrow .del { border: 0; background: transparent; color: var(--muted); cursor: pointer;
+    font-size: 1rem; padding: .2rem .4rem; border-radius: 6px; }
+  .qrow .del:hover { background: var(--red-bg); color: var(--red); }
+  .actions { display: flex; justify-content: center; align-items: flex-end; gap: .7rem;
+    margin-top: 1.1rem; flex-wrap: wrap; }
+  .engine-pick { display: flex; flex-direction: column; gap: .25rem; font-size: .7rem; color: var(--muted); }
+  select, .btn { font: inherit; }
+  select { padding: .5rem .6rem; border-radius: 8px; border: 1px solid var(--border); background: #fff; }
+  .btn { font-weight: 600; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+  #proses { background: var(--primary); color: var(--primary-ink); padding: .62rem 2rem; font-size: .95rem; }
+  #proses:hover:not(:disabled) { background: #0a4087; }
+  #proses:disabled { opacity: .5; cursor: not-allowed; }
+  #clear { background: #fff; color: var(--ink); border-color: var(--border); padding: .62rem 1.1rem; }
+  .status { margin-top: .9rem; text-align: center; min-height: 1.4em; font-size: .88rem; color: var(--muted); }
+  .status.err { color: var(--red); }
+  .status.ok { color: var(--green); }
+  /* ---------- results ---------- */
+  .summary { display: flex; gap: .8rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .stat { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 8px;
+    padding: .6rem .8rem; background: #fafbfd; }
+  .stat b { display: block; font-size: 1.35rem; }
+  .stat span { font-size: .75rem; color: var(--muted); }
+  .stat.dim b { color: var(--red); }
+  .stat.lolos b { color: var(--green); }
+  .stat.err b { color: var(--amber); }
+  .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .9rem; }
+  .res { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; }
+  .res .body { display: flex; gap: .8rem; }
+  .res .thumb { width: 86px; height: 86px; object-fit: cover; border-radius: 8px;
+    border: 1px solid var(--border); background: #f9fafb; flex-shrink: 0; cursor: zoom-in; }
+  .res .details { min-width: 0; flex: 1; }
+  .res .head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+  .res .nm { font-weight: 600; font-size: .86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { font-size: .74rem; font-weight: 700; padding: .16rem .6rem; border-radius: 999px;
+    border: 1px solid; flex-shrink: 0; }
+  .badge.dim { color: var(--red); background: var(--red-bg); border-color: var(--red-bd); }
+  .badge.lolos { color: var(--green); background: var(--green-bg); border-color: var(--green-bd); }
+  .badge.err { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-bd); }
+  .res .meta { margin-top: .5rem; font-size: .78rem; color: var(--muted); display: grid; gap: .15rem; }
+  .res .meta code { color: var(--ink); font-family: ui-monospace, monospace; }
+  .res .alasan { margin-top: .55rem; padding-top: .55rem; border-top: 1px solid var(--border); font-size: .8rem; }
+  .res .alasan li { margin-left: 1.1rem; color: #344054; }
+  .res .ocr { margin-top: .55rem; padding: .5rem .6rem; background: #f9fafb; border-radius: 6px;
+    font-size: .76rem; color: var(--muted); max-height: 96px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-in">
+      <div class="brand-mark">MD</div>
+      <div>
+        <h1>Moderasi Gambar Otomatis</h1>
+        <div class="sub">Rust + ONNX (YOLO11-cls · CLIP) · Tesseract OCR</div>
+      </div>
+      <div class="health"><span class="dot" id="dot"></span><span id="hlth">memeriksa server…</span></div>
+    </div>
+  </div>
+
+  <main>
+    <section class="card">
+      <h2>Upload gambar</h2>
+      <div class="dropzone" id="dz">
+        <p class="main">Seret gambar ke sini atau <span class="browse">pilih file</span></p>
+        <p class="hint">Ekstensi: JPG, PNG, WEBP, GIF, BMP — satu atau banyak sekaligus</p>
+      </div>
+      <input type="file" id="file" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp" multiple hidden>
+      <div class="queue" id="queue" hidden></div>
+      <div class="actions">
+        <div class="engine-pick">
+          <label for="visual">Engine visual</label>
+          <select id="visual"><option value="yolo">YOLO (default)</option>
+          <option value="clip">CLIP</option><option value="">Auto / current</option></select>
+        </div>
+        <button id="proses" class="btn" disabled>Proses</button>
+        <button id="clear" class="btn">Bersihkan</button>
+      </div>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="card" id="hasilCard" hidden>
+      <h2>Hasil</h2>
+      <div class="summary" id="summary"></div>
+      <div class="results" id="hasil"></div>
+    </section>
+  </main>
+
+<script>
+const dz = document.getElementById('dz');
+const fileInput = document.getElementById('file');
+const queue = document.getElementById('queue');
+const visual = document.getElementById('visual');
+const proses = document.getElementById('proses');
+const clearBtn = document.getElementById('clear');
+const status = document.getElementById('status');
+
+let items = [];
+let thumbMap = {};
+
+function addFiles(list) {
+  for (const f of list) {
+    if (!f.type.startsWith('image/')) { status.textContent = 'Tipe file tidak didukung'; status.className = 'status err'; continue; }
+    items.push(f);
+    thumbMap[f.name] = URL.createObjectURL(f);
+  }
+  renderQueue();
+}
+function renderQueue() {
+  queue.hidden = items.length === 0;
+  queue.innerHTML =
+    '<div class="queue-head"><span><b>' + items.length + '</b> file</span><span>siap diproses</span></div>' +
+    items.map((f, i) =>
+      '<div class="qrow"><img class="thumb" src="' + thumbMap[f.name] + '" alt="">' +
+      '<span class="nm">' + esc(f.name) + '</span>' +
+      '<button class="del" data-i="' + i + '">✕</button></div>').join('');
+  queue.querySelectorAll('.del').forEach(b =>
+    b.onclick = () => { items.splice(+b.dataset.i, 1); renderQueue(); });
+  proses.disabled = items.length === 0;
+}
+function esc(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+dz.onclick = () => fileInput.click();
+dz.ondragover = e => { e.preventDefault(); dz.classList.add('dragover'); };
+dz.ondragleave = () => dz.classList.remove('dragover');
+dz.ondrop = e => { e.preventDefault(); dz.classList.remove('dragover'); addFiles(e.dataTransfer.files); };
+fileInput.onchange = () => { addFiles(fileInput.files); fileInput.value = ''; };
+clearBtn.onclick = () => {
+  for (const k in thumbMap) URL.revokeObjectURL(thumbMap[k]);
+  thumbMap = {};
+  items = []; renderQueue(); status.textContent = ''; status.className = 'status';
+};
+
+async function checkHealth() {
+  try {
+    const r = await fetch('/health');
+    if (!r.ok) throw new Error();
+    const j = await r.json();
+    document.getElementById('dot').classList.add('ok');
+    document.getElementById('hlth').textContent = 'server aktif · engine: ' + j.visual_engine;
+  } catch (e) {
+    document.getElementById('hlth').textContent = 'server tidak terjangkau';
+  }
+}
+checkHealth();
+
+proses.onclick = async () => {
+  if (!items.length) return;
+  const fd = new FormData();
+  for (const f of items) fd.append('files', f, f.name);
+  const engine = visual.value;
+  const q = engine ? '?visual=' + engine : '';
+  status.textContent = 'Memproses ' + items.length + ' gambar… (tergantung ukuran, bisa beberapa detik/gambar)';
+  status.className = 'status';
+  proses.disabled = true;
+  try {
+    const r = await fetch('/api/moderasi/bulk' + q, { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) {
+      status.textContent = 'Error: ' + (j.detail || r.status); status.className = 'status err'; return;
+    }
+    render(j);
+    status.textContent = 'Selesai dalam ' + j.ringkasan.elapsed_ms + ' ms';
+    status.className = 'status ok';
+  } catch (e) {
+    status.textContent = 'Error: ' + e; status.className = 'status err';
+  } finally {
+    proses.disabled = false;
+  }
+};
+
+function render(j) {
+  const s = j.ringkasan;
+  document.getElementById('summary').innerHTML =
+    '<div class="stat dim"><b>' + s.dimoderasi + '</b><span>DIMODERASI</span></div>' +
+    '<div class="stat lolos"><b>' + s.lolos + '</b><span>LOLOS</span></div>' +
+    '<div class="stat err"><b>' + s.error + '</b><span>ERROR</span></div>' +
+    '<div class="stat"><b>' + s.total + '</b><span>total · ' + s.avg_elapsed_ms + ' ms rata-rata</span></div>';
+  document.getElementById('hasil').innerHTML = j.results.map(resHtml).join('');
+  document.getElementById('hasilCard').hidden = false;
+}
+
+function resHtml(r) {
+  const badge = r.keputusan === 'DIMODERASI' ? 'dim' : (r.keputusan === 'ERROR' ? 'err' : 'lolos');
+  const conf = (r.yolo_conf === null || r.yolo_conf === undefined)
+    ? '—' : (Math.round(r.yolo_conf * 10000) / 100).toFixed(2) + '%';
+  const meta =
+    '<code>letak: ' + esc(r.visual_engine || '—') + '</code>' +
+    '<code>kelas: ' + esc(r.yolo_class || '—') + ' · conf ' + conf + '</code>' +
+    '<code>violative: ' + (r.yolo_violative ? 'ya' : 'tidak') + '</code>' +
+    '<code>keyword: ' + esc((r.keyword_hits || []).join(', ') || '—') + '</code>' +
+    '<code>elapsed: ' + r.elapsed_ms + ' ms</code>';
+  const alasan = (r.alasan || []).map(a => '<li>' + esc(a) + '</li>').join('');
+  const ocr = (r.ocr_text || '').trim()
+    ? '<div class="ocr">' + esc(r.ocr_text) + '</div>' : '';
+  const url = thumbMap[r.filename];
+  const thumb = url
+    ? '<a href="' + url + '" target="_blank" title="klik untuk lihat besar"><img class="thumb" src="' + url + '" alt=""></a>'
+    : '<div class="thumb" style="cursor:default"></div>';
+  return '<div class="res"><div class="body">' + thumb +
+    '<div class="details"><div class="head"><span class="nm">' + esc(r.filename) + '</span>' +
+    '<span class="badge ' + badge + '">' + r.keputusan + '</span></div>' +
+    '<div class="meta">' + meta + '</div>' +
+    (alasan ? '<ul class="alasan">' + alasan + '</ul>' : '') +
+    ocr + '</div></div></div>';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Build artifacts
+/target/
+
+# Model runtime (diunduh/ekspor manual, tidak di-commit)
+/models/
+
+# Artefak paritas & benchmark (dihasilkan dari prototype Python)
+/reference/
+/results/
+
+# Log server saat uji
+server_out.txt
+server_err.txt
+*.log
