@@ -1,0 +1,13 @@
+[Unit]
+Description=Moderasi Gambar (moderasi-flow)
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/moderasi-rs
+ExecStart=/opt/moderasi-rs/target/release/moderasi-flow server --models ./models --tesseract /usr/bin/tesseract --host 127.0.0.1 --port 8787
+Restart=always
+RestartSec=3
+User=www-data
+
+[Install]
+WantedBy=multi-user.target
